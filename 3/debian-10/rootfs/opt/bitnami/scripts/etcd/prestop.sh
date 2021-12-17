@@ -19,4 +19,4 @@ if is_empty_value "${endpoints}"; then
 fi
 read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
 extra_flags+=("--endpoints=${endpoints}" "--debug=true")
-etcdctl member remove "$(cat "${ETCD_DATA_DIR}/member_id")" "${extra_flags[@]}" > "$(dirname "$ETCD_DATA_DIR")/member_removal.log"
+stdbuf -oL etcdctl member remove "$(cat "${ETCD_DATA_DIR}/member_id")" "${extra_flags[@]}" > "$(dirname "$ETCD_DATA_DIR")/member_removal.log"
