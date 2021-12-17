@@ -1,3 +1,7 @@
+# why we add this fork
+
+We fork this from github.com/bitnami/bitnami-docker-etcd (tag: 3.5.0-debian-10-r114). While bitnami has bump the version to 3.5.1, we decided to keep on using etcd 3.5.0 to avoid some uncertainties that might be brought by new version, and we also want use the bugfix patches applied together with patches applied by ourselves.
+
 # What is etcd?
 
 > etcd is a distributed key-value store designed to securely store data across a cluster. etcd is widely used in production on account of its reliability, fault-tolerance and ease of use.
