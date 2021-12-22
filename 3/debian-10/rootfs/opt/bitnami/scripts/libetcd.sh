@@ -212,6 +212,48 @@ etcd_store_member_id() {
 }
 
 ########################
+# Check if self was removed by querying cluster
+# Globals:
+#   ETCD_*
+# Arguments:
+#   None
+# Returns:
+#   None
+########################
+was_removed_from_cluster() {
+    local -a extra_flags
+
+    read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
+    extra_flags+=("--endpoints=$(etcdctl_get_endpoints)")
+    if retry_while "etcdctl ${extra_flags[*]} member list" >/dev/null 2>&1; then
+        if is_empty_value get_member_id_from_cluster; then
+            return 0
+        else
+            return 1
+        fi
+    fi
+}
+
+########################
+# Get etcd member ID from cluster
+# Globals:
+#   ETCD_*
+# Arguments:
+#   None
+# Returns:
+#   None
+########################
+get_member_id_from_cluster() {
+    read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
+    extra_flags+=("--endpoints=$(etcdctl_get_endpoints)")
+    if retry_while "etcdctl ${extra_flags[*]} member list" >/dev/null 2>&1; then
+        member_id=$(etcdctl "${extra_flags[@]}" member list | grep -w "$ETCD_ADVERTISE_CLIENT_URLS" | awk -F "," '{ print $1}')
+        stdbuf -oL echo "$member_id" > "${ETCD_DATA_DIR}/member_id"
+        return member_id
+    fi
+}
+
+########################
 # Configure etcd RBAC (do not confuse with K8s RBAC)
 # Globals:
 #   ETCD_*
@@ -246,10 +288,20 @@ etcd_configure_rbac() {
 was_etcd_member_removed() {
     local return_value=0
 
-    if grep -sqE "^Member[[:space:]]+[a-z0-9]+\s+removed\s+from\s+cluster\s+[a-z0-9]+$" "${ETCD_VOLUME_DIR}/member_removal.log"; then
-        debug "Removal was properly recorded in member_removal.log"
-        rm -rf "${ETCD_DATA_DIR:?}/"*
-    elif [[ ! -d "${ETCD_DATA_DIR}/member/snap" ]] && [[ ! -f "$ETCD_DATA_DIR/member_id" ]]; then
+    if [[ -f "${ETCD_VOLUME_DIR}/member_removal.log" ]]; then
+        if grep -sqE "^Member[[:space:]]+[a-z0-9]+\s+removed\s+from\s+cluster\s+[a-z0-9]+$" "${ETCD_VOLUME_DIR}/member_removal.log"; then
+            debug "Removal was properly recorded in member_removal.log"
+            rm -rf "${ETCD_DATA_DIR:?}/"*
+        else
+            debug "Bad format member_removal.log, checking by cluster"
+            if was_removed_from_cluster; then
+                debug "Member not found in cluster"
+                rm -rf "${ETCD_DATA_DIR:?}/"*
+            else
+                debug "Member still in cluster"
+            fi
+        fi
+    elif [[ ! -d "${ETCD_DATA_DIR}/member/snap" ]] && [[ ! -f "${ETCD_DATA_DIR}/member_id" ]]; then
         debug "Missing member data"
         rm -rf "${ETCD_DATA_DIR:?}/"*
     else
