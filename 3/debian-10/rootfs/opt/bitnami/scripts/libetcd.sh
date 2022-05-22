@@ -273,7 +273,7 @@ is_new_etcd_cluster() {
 }
 
 ########################
-# Checks if there are enough active members
+# Checks if there are enough active members, will also set ETCD_ACTIVE_ENDPOINTS
 # Globals:
 #   ETCD_*
 # Arguments:
@@ -284,7 +284,7 @@ is_new_etcd_cluster() {
 is_healthy_etcd_cluster() {
     local return_value=0
     local active_endpoints=0
-    local -a extra_flags
+    local -a extra_flags active_endpoints_array
     local host port
 
     read -r -a endpoints_array <<< "$(tr ',;' ' ' <<< "$(etcdctl_get_endpoints)")"
@@ -297,8 +297,11 @@ is_healthy_etcd_cluster() {
         if [[ "$e" != "$host:$port" ]] && etcdctl endpoint health "${extra_flags[@]}" >/dev/null 2>&1; then
             debug "$e endpoint is active"
             ((active_endpoints++))
+            active_endpoints_array+=("$e")
         fi
     done
+    ETCD_ACTIVE_ENDPOINTS=$(echo "${active_endpoints_array[*]}" | tr ' ' ',')
+    export ETCD_ACTIVE_ENDPOINTS
 
     if is_boolean_yes "$ETCD_DISASTER_RECOVERY"; then
         if [[ -f "/snapshots/.disaster_recovery" ]]; then
@@ -428,10 +431,7 @@ etcd_initialize() {
             else
                 info "Adding new member to existing cluster"
                 ensure_dir_exists "$ETCD_DATA_DIR"
-                read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
-                extra_flags+=("--endpoints=$(etcdctl_get_endpoints)" "--peer-urls=$ETCD_INITIAL_ADVERTISE_PEER_URLS")
-                etcdctl member add "$ETCD_NAME" "${extra_flags[@]}" | grep "^ETCD_" > "$ETCD_NEW_MEMBERS_ENV_FILE"
-                replace_in_file "$ETCD_NEW_MEMBERS_ENV_FILE" "^" "export "
+                add_self_to_cluster
             fi
         fi
         if is_boolean_yes "$ETCD_START_FROM_SNAPSHOT"; then
@@ -449,7 +449,6 @@ etcd_initialize() {
                     )
                 fi
                 debug_execute etcdctl snapshot restore "${ETCD_INIT_SNAPSHOTS_DIR}/${ETCD_INIT_SNAPSHOT_FILENAME}" "${restore_args[@]}"
-                debug_execute etcd_store_member_id &
             else
                 error "There was no snapshot to restore!"
                 exit 1
@@ -465,7 +464,6 @@ etcd_initialize() {
             else
                 ! is_empty_value "$ETCD_ROOT_PASSWORD" && etcd_configure_rbac
             fi
-            debug_execute etcd_store_member_id &
         fi
     else
         info "Detected data from previous deployments"
@@ -474,49 +472,70 @@ etcd_initialize() {
             debug_execute chmod -R 700 "$ETCD_DATA_DIR" || true
         fi
         if [[ ${#initial_members[@]} -gt 1 ]]; then
-            if ! is_healthy_etcd_cluster; then
-                warn "Cluster not responding!"
-                if is_boolean_yes "$ETCD_DISASTER_RECOVERY"; then
-                    latest_snapshot_file="$(find /snapshots/ -maxdepth 1 -type f -name 'db-*' | sort | tail -n 1)"
-                    if [[ "${latest_snapshot_file}" != "" ]]; then
-                        info "Restoring etcd cluster from snapshot"
-                        rm -rf "$ETCD_DATA_DIR"
-                        ETCD_INITIAL_CLUSTER="$(recalculate_initial_cluster)"
-                        export ETCD_INITIAL_CLUSTER
-                        debug_execute etcdctl snapshot restore "${latest_snapshot_file}" \
-                          --name "$ETCD_NAME" \
-                          --data-dir "$ETCD_DATA_DIR" \
-                          --initial-cluster "$ETCD_INITIAL_CLUSTER" \
-                          --initial-cluster-token "$ETCD_INITIAL_CLUSTER_TOKEN" \
-                          --initial-advertise-peer-urls "$ETCD_INITIAL_ADVERTISE_PEER_URLS"
-                        debug_execute etcd_store_member_id &
-                    else
-                        error "There was no snapshot to restore!"
-                        exit 1
-                    fi
-                else
-                    warn "Disaster recovery is disabled, the cluster will try to recover on it's own"
-                fi
-            elif was_etcd_member_removed; then
-                info "Adding new member to existing cluster"
-                read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
-                extra_flags+=("--endpoints=$(etcdctl_get_endpoints)" "--peer-urls=$ETCD_INITIAL_ADVERTISE_PEER_URLS")
-                etcdctl member add "$ETCD_NAME" "${extra_flags[@]}" | grep "^ETCD_" > "$ETCD_NEW_MEMBERS_ENV_FILE"
-                replace_in_file "$ETCD_NEW_MEMBERS_ENV_FILE" "^" "export "
-                debug_execute etcd_store_member_id &
-            elif [[ -f "${ETCD_DATA_DIR}/member_id" ]]; then
-                info "Updating member in existing cluster"
-                export ETCD_INITIAL_CLUSTER_STATE=existing
-                read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
-                extra_flags+=("--endpoints=$(etcdctl_get_endpoints true)" "--peer-urls=$ETCD_INITIAL_ADVERTISE_PEER_URLS")
-                etcdctl member update "$(cat "${ETCD_DATA_DIR}/member_id")" "${extra_flags[@]}"
-            else
-                info "Member ID wasn't properly stored, the member will try to join the cluster by it's own"
-                export ETCD_INITIAL_CLUSTER_STATE=existing
-            fi
+            info "The member will try to join the cluster by it's own"
+            export ETCD_INITIAL_CLUSTER_STATE=existing
         fi
     fi
 
     # Avoid exit code of previous commands to affect the result of this function
     true
+}
+
+########################
+# Add self to cluster if not
+# Globals:
+#   ETCD_*
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+add_self_to_cluster() {
+    local -a extra_flags
+    read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
+    # is_healthy_etcd_cluster will also set ETCD_ACTIVE_ENDPOINTS
+    while ! is_healthy_etcd_cluster; do
+        warn "Cluster not healthy, not adding self to cluster for now, keeping trying..."
+        sleep 10
+    done
+
+    # only send req to healthy nodes
+
+    if is_empty_value "$(get_member_id)"; then
+        extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}" "--peer-urls=$ETCD_INITIAL_ADVERTISE_PEER_URLS")
+        while ! etcdctl member add "$ETCD_NAME" "${extra_flags[@]}"  | grep "^ETCD_" > "$ETCD_NEW_MEMBERS_ENV_FILE"; do
+            warn "Failed to add self to cluster, keeping trying..."
+            sleep 10
+        done
+        replace_in_file "$ETCD_NEW_MEMBERS_ENV_FILE" "^" "export "
+        sync -d "$ETCD_NEW_MEMBERS_ENV_FILE"
+    else
+        info "Node already in cluster"
+    fi
+    info "Loading env vars of existing cluster"
+    . "$ETCD_NEW_MEMBERS_ENV_FILE"
+}
+
+########################
+# Get this node's member_id in cluster, if not in cluster return empty string
+# Globals:
+#   ETCD_*
+# Arguments:
+#   None
+# Returns:
+#   String
+#########################
+get_member_id() {
+    local ret
+    local -a extra_flags
+    read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
+    extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}")
+    ret=$(etcdctl "${extra_flags[@]}" member list | grep -w "$ETCD_INITIAL_ADVERTISE_PEER_URLS" | awk -F "," '{ print $1}')
+    # if not return zero
+    info "member id: $ret"
+    if [[ $? -ne 0 ]]; then
+        echo ""
+    else
+        echo "$ret"
+    fi
 }
