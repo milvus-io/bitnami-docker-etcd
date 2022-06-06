@@ -11,7 +11,7 @@ COPY prebuildfs /
 RUN install_packages acl ca-certificates curl gzip procps tar
 RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "yq" "4.25.1-0" --checksum 863b0a81f75feed5c08bb5c1c5b280469b10c7cee9232ecbf613544755a7433c
 RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "gosu" "1.14.0-7" --checksum d6280b6f647a62bf6edc74dc8e526bfff63ddd8067dcb8540843f47203d9ccf1
-RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "etcd" "3.5.4-0" --checksum bfc4ad1f99f9091adae878e640d0c917822f43d620e7ab4a719e4396cc51adab
+RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "etcd" "3.5.1-3" --checksum 1701c6528ced4bac3f0ee05ae0cd7623539e023edcce933f069d5f279aa36b1
 RUN apt-get update && apt-get upgrade -y && \
     rm -r /var/lib/apt/lists /var/cache/apt/archives
 RUN chmod g+rwX /opt/bitnami
