@@ -18,7 +18,7 @@ RUN chmod g+rwX /opt/bitnami
 
 COPY rootfs /
 RUN /opt/bitnami/scripts/etcd/postunpack.sh
-ENV APP_VERSION="3.5.4" \
+ENV APP_VERSION="3.5.1" \
     BITNAMI_APP_NAME="etcd" \
     PATH="/opt/bitnami/common/bin:/opt/bitnami/etcd/bin:$PATH"
 
