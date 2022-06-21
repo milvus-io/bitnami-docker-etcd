@@ -551,6 +551,12 @@ etcd_initialize() {
     [[ -f "$ETCD_CONF_FILE" ]] && etcd_conf_write "initial-cluster" "$ETCD_INITIAL_CLUSTER"
 
     read -r -a initial_members <<<"$(tr ',;' ' ' <<<"$ETCD_INITIAL_CLUSTER")"
+
+    if -f "$(dirname "$ETCD_DATA_DIR")/member_removal.log"; then
+        info "Is upgraded from old version and is removed from cluster, we clean up the data dir"
+        rm -rf "${ETCD_DATA_DIR:?}/"*
+    fi
+
     if is_mounted_dir_empty "$ETCD_DATA_DIR"; then
         info "There is no data from previous deployments"
         if [[ ${#initial_members[@]} -gt 1 ]]; then
