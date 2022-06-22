@@ -260,6 +260,11 @@ etcdctl_get_endpoints() {
     ! is_empty_value "$ETCD_CLUSTER_DOMAIN" && domain="$ETCD_CLUSTER_DOMAIN"
     # Depending on the K8s distro & the DNS plugin, it might need
     # a few seconds to associate the POD(s) IP(s) to the headless svc domain
+    MY_STS_NAME="${MY_STS_NAME:-}"
+    if is_empty_value "$MY_STS_NAME"; then
+        export MY_STS_NAME="$(echo "$ETCD_CLUSTER_DOMAIN"| awk -F '-headless' '{print $1}')"
+        info "set MY_STS_NAME=$MY_STS_NAME from service name"
+    fi
     if retry_while "hostname_has_ips $domain"; then
         local -r ahosts="$(getent ahosts "$domain" | awk '{print $1}' | uniq | wc -l)"
         for i in $(seq 0 $((ahosts - 1))); do
@@ -552,9 +557,14 @@ etcd_initialize() {
 
     read -r -a initial_members <<<"$(tr ',;' ' ' <<<"$ETCD_INITIAL_CLUSTER")"
 
-    if -f "$(dirname "$ETCD_DATA_DIR")/member_removal.log"; then
-        info "Is upgraded from old version and is removed from cluster, we clean up the data dir"
-        rm -rf "${ETCD_DATA_DIR:?}/"*
+    if [[ -f "$(dirname "$ETCD_DATA_DIR")/member_removal.log" ]]; then
+        info "Is upgraded from old version and is removed from cluster, checking if already removed from cluster"
+        if is_empty_value "$(get_member_id)"; then
+            info "member id already removed, we clean up the data dir"
+            rm -rf "${ETCD_DATA_DIR:?}/"*
+        else
+            info "member id still good"
+        fi
     fi
 
     if is_mounted_dir_empty "$ETCD_DATA_DIR"; then
@@ -691,6 +701,10 @@ add_self_to_cluster() {
 get_member_id() {
     local ret
     local -a extra_flags
+    ETCD_ACTIVE_ENDPOINTS=${ETCD_ACTIVE_ENDPOINTS:-}
+    if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
+        is_healthy_etcd_cluster
+    fi
     read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
     extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}")
     ret=$(etcdctl "${extra_flags[@]}" member list | grep -w "$ETCD_INITIAL_ADVERTISE_PEER_URLS" | awk -F "," '{ print $1}')
