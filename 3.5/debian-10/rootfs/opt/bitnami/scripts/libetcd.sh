@@ -557,13 +557,19 @@ etcd_initialize() {
 
     read -r -a initial_members <<<"$(tr ',;' ' ' <<<"$ETCD_INITIAL_CLUSTER")"
 
-    if [[ -f "$(dirname "$ETCD_DATA_DIR")/member_removal.log" ]]; then
-        info "Is upgraded from old version and is removed from cluster, checking if already removed from cluster"
+    if [[ -f "${ETCD_VOLUME_DIR}/member_removal.log" ]]; then
+        info "Is upgraded from old version, checking if already removed from cluster"
         if is_empty_value "$(get_member_id)"; then
-            info "member id already removed, we clean up the data dir"
-            rm -rf "${ETCD_DATA_DIR:?}/"*
+            ETCD_ACTIVE_ENDPOINTS=${ETCD_ACTIVE_ENDPOINTS:-}
+            if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
+                info "The cluster is all down, so we don't know which state the node is, so we assume it's ok this time."
+            else
+                info "member id already removed, we clean up the data dir"
+                rm -rf "${ETCD_DATA_DIR:?}/"*
+            fi
         else
             info "member id still good"
+            rm -f "${ETCD_VOLUME_DIR}/member_removal.log"
         fi
     fi
 
@@ -704,6 +710,10 @@ get_member_id() {
     ETCD_ACTIVE_ENDPOINTS=${ETCD_ACTIVE_ENDPOINTS:-}
     if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
         is_healthy_etcd_cluster
+    fi
+    if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
+        echo ""
+        return 0
     fi
     read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
     extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}")
