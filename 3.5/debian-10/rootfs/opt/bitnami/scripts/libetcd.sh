@@ -392,6 +392,46 @@ is_new_etcd_cluster() {
 }
 
 ########################
+# return active members
+# Globals:
+#   ETCD_*
+# Arguments:
+#   None
+# Returns:
+#   ETCD_ACTIVE_ENDPOINTS
+########################
+get_etcd_active_endpoints() {
+    info "get_etcd_active_endpoints"
+    local return_value=0
+    local active_endpoints=0
+    local -a extra_flags active_endpoints_array
+    local -a endpoints_array=()
+    local host port
+
+    is_boolean_yes "$ETCD_ON_K8S" && read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_endpoints)")"
+    local -r cluster_size=${#endpoints_array[@]}
+    read -r -a advertised_array <<<"$(tr ',;' ' ' <<<"$ETCD_ADVERTISE_CLIENT_URLS")"
+    host="$(parse_uri "${advertised_array[0]}" "host")"
+    port="$(parse_uri "${advertised_array[0]}" "port")"
+    if [[ $cluster_size -gt 0 ]]; then
+        for e in "${endpoints_array[@]}"; do
+            read -r -a extra_flags <<<"$(etcdctl_auth_flags)"
+            extra_flags+=("--endpoints=$e")
+            if [[ "$e" != "$host:$port" ]] && etcdctl endpoint health "${extra_flags[@]}" >/dev/null 2>&1; then
+                debug "$e endpoint is active"
+                ((active_endpoints++))
+                active_endpoints_array+=("$e")
+            fi
+        done
+        info "$(echo "${active_endpoints_array[*]}" | tr ' ' ',')"
+        echo "$(echo "${active_endpoints_array[*]}" | tr ' ' ',')"
+    else
+        warn "cluster size < 1"
+        echo ""
+    fi
+}
+
+########################
 # Checks if there are enough active members, will also set ETCD_ACTIVE_ENDPOINTS
 # Globals:
 #   ETCD_*
@@ -401,6 +441,7 @@ is_new_etcd_cluster() {
 #   Boolean
 ########################
 is_healthy_etcd_cluster() {
+    info "check is_healthy_etcd_cluster"
     local return_value=0
     local active_endpoints=0
     local -a extra_flags active_endpoints_array
@@ -559,8 +600,9 @@ etcd_initialize() {
 
     if [[ -f "${ETCD_VOLUME_DIR}/member_removal.log" ]]; then
         info "Is upgraded from old version, checking if already removed from cluster"
+        ETCD_ACTIVE_ENDPOINTS="$(get_etcd_active_endpoints)"
+        export ETCD_ACTIVE_ENDPOINTS
         if is_empty_value "$(get_member_id)"; then
-            ETCD_ACTIVE_ENDPOINTS=${ETCD_ACTIVE_ENDPOINTS:-}
             if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
                 info "The cluster is all down, so we don't know which state the node is, so we assume it's ok this time."
             else
@@ -710,12 +752,13 @@ get_member_id() {
     ETCD_ACTIVE_ENDPOINTS=${ETCD_ACTIVE_ENDPOINTS:-}
     if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
         is_healthy_etcd_cluster
+        export ETCD_ACTIVE_ENDPOINTS
+        if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
+            echo ""
+            return 0
+        fi
     fi
     export ETCD_ACTIVE_ENDPOINTS
-    if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
-        echo ""
-        return 0
-    fi
     read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
     extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}")
     ret=$(etcdctl "${extra_flags[@]}" member list | grep -w "$ETCD_INITIAL_ADVERTISE_PEER_URLS" | awk -F "," '{ print $1}')
