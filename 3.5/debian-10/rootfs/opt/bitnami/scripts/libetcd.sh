@@ -711,6 +711,7 @@ get_member_id() {
     if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
         is_healthy_etcd_cluster
     fi
+    export ETCD_ACTIVE_ENDPOINTS
     if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
         echo ""
         return 0
