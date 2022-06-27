@@ -221,61 +221,7 @@ etcd_start_bg() {
 #   String
 ########################
 etcdctl_get_endpoints() {
-    local only_others=${1:-false}
-    local -a endpoints=()
-    local host domain port
-
-    ip_has_valid_hostname() {
-        local ip="${1:?ip is required}"
-        local parent_domain="${1:?parent_domain is required}"
-
-        # 'getent hosts $ip' can return hostnames in 2 different formats:
-        #     POD_NAME.HEADLESS_SVC_DOMAIN.NAMESPACE.svc.cluster.local (using headless service domain)
-        #     10-237-136-79.SVC_DOMAIN.NAMESPACE.svc.cluster.local (using POD's IP and service domain)
-        # We need to discad the latter to avoid issues when TLS verification is enabled.
-        [[ "$(getent hosts "$ip")" = *"$parent_domain"* ]] && return 0
-        return 1
-    }
-
-    hostname_has_ips() {
-        local hostname="${1:?hostname is required}"
-        [[ "$(getent ahosts "$hostname")" != "" ]] && return 0
-        return 1
-    }
-
-    # This piece of code assumes this code is executed on a K8s environment
-    # where etcd members are part of a statefulset that uses a headless service
-    # to create a unique FQDN per member. Under these circumstances, the
-    # ETCD_ADVERTISE_CLIENT_URLS env. variable is created as follows:
-    #   SCHEME://POD_NAME.HEADLESS_SVC_DOMAIN:CLIENT_PORT,SCHEME://SVC_DOMAIN:SVC_CLIENT_PORT
-    #
-    # Assuming this, we can extract the HEADLESS_SVC_DOMAIN and obtain
-    # every available endpoint
-    read -r -a advertised_array <<<"$(tr ',;' ' ' <<<"$ETCD_ADVERTISE_CLIENT_URLS")"
-    host="$(parse_uri "${advertised_array[0]}" "host")"
-    port="$(parse_uri "${advertised_array[0]}" "port")"
-    domain="${host#"${ETCD_NAME}."}"
-    # When ETCD_CLUSTER_DOMAIN is set, we use that value instead of extracting
-    # it from ETCD_ADVERTISE_CLIENT_URLS
-    ! is_empty_value "$ETCD_CLUSTER_DOMAIN" && domain="$ETCD_CLUSTER_DOMAIN"
-    # Depending on the K8s distro & the DNS plugin, it might need
-    # a few seconds to associate the POD(s) IP(s) to the headless svc domain
-    MY_STS_NAME="${MY_STS_NAME:-}"
-    if is_empty_value "$MY_STS_NAME"; then
-        export MY_STS_NAME="$(echo "$ETCD_CLUSTER_DOMAIN"| awk -F '-headless' '{print $1}')"
-        info "set MY_STS_NAME=$MY_STS_NAME from service name"
-    fi
-    if retry_while "hostname_has_ips $domain"; then
-        local -r ahosts="$(getent ahosts "$domain" | awk '{print $1}' | uniq | wc -l)"
-        for i in $(seq 0 $((ahosts - 1))); do
-            # We use the StatefulSet name stored in MY_STS_NAME to get the peer names based on the number of IPs registered in the headless service
-            pod_name="${MY_STS_NAME}-${i}"
-            if ! { [[ $only_others = true ]] && [[ "$pod_name" = "$MY_POD_NAME" ]]; }; then
-                endpoints+=("${pod_name}.${ETCD_CLUSTER_DOMAIN}:${port:-2380}")
-            fi
-        done
-    fi
-    echo "${endpoints[*]}" | tr ' ' ','
+   echo "$ETCD_INITIAL_CLUSTER" | sed 's/^[^=]\+=http/http/g' |sed 's/,[^=]\+=/,/g'
 }
 
 ########################
@@ -401,7 +347,6 @@ is_new_etcd_cluster() {
 #   ETCD_ACTIVE_ENDPOINTS
 ########################
 get_etcd_active_endpoints() {
-    info "get_etcd_active_endpoints"
     local return_value=0
     local active_endpoints=0
     local -a extra_flags active_endpoints_array
@@ -503,36 +448,6 @@ is_healthy_etcd_cluster() {
 }
 
 ########################
-# Prints initial cluster nodes
-# Globals:
-#   ETCD_*
-# Arguments:
-#   None
-# Returns:
-#   String
-########################
-get_initial_cluster() {
-    local -a endpoints_array=()
-    local scheme port initial_members
-    read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$ETCD_INITIAL_CLUSTER")"
-    if [[ ${#endpoints_array[@]} -gt 0 ]] && ! grep -sqE "://" <<<"$ETCD_INITIAL_CLUSTER"; then
-        # This piece of code assumes this container is used on a VM environment
-        # where ETCD_INITIAL_CLUSTER contains a comma-separated list of hostnames,
-        # and recreates it as follows:
-        #   SCHEME://NOTE_NAME:PEER_PORT
-        scheme="$(parse_uri "$ETCD_INITIAL_ADVERTISE_PEER_URLS" "scheme")"
-        port="$(parse_uri "$ETCD_INITIAL_ADVERTISE_PEER_URLS" "port")"
-        for nodePeer in "${endpoints_array[@]}"; do
-            initial_members+=("${nodePeer}=${scheme}://${nodePeer}:$port")
-        done
-        echo "${initial_members[*]}" | tr ' ' ','
-    else
-        # Nothing to do
-        echo "$ETCD_INITIAL_CLUSTER"
-    fi
-}
-
-########################
 # Recalculate initial cluster
 # Globals:
 #   ETCD_*
@@ -592,8 +507,6 @@ etcd_initialize() {
     # Generate user configuration if ETCD_CFG_* variables are provided
     etcd_setup_from_environment_variables
 
-    ETCD_INITIAL_CLUSTER="$(get_initial_cluster)"
-    export ETCD_INITIAL_CLUSTER
     [[ -f "$ETCD_CONF_FILE" ]] && etcd_conf_write "initial-cluster" "$ETCD_INITIAL_CLUSTER"
 
     read -r -a initial_members <<<"$(tr ',;' ' ' <<<"$ETCD_INITIAL_CLUSTER")"
@@ -601,6 +514,7 @@ etcd_initialize() {
     if [[ -f "${ETCD_VOLUME_DIR}/member_removal.log" ]]; then
         info "Is upgraded from old version, checking if already removed from cluster"
         ETCD_ACTIVE_ENDPOINTS="$(get_etcd_active_endpoints)"
+        info "get_etcd_active_endpoints: $ETCD_ACTIVE_ENDPOINTS"
         export ETCD_ACTIVE_ENDPOINTS
         if is_empty_value "$(get_member_id)"; then
             if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
@@ -721,20 +635,24 @@ add_self_to_cluster() {
     done
 
     # only send req to healthy nodes
-
+    info "Start adding self to cluster using etcdctl..."
     if is_empty_value "$(get_member_id)"; then
         extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}" "--peer-urls=$ETCD_INITIAL_ADVERTISE_PEER_URLS")
+        info "Calling: etcdctl member add "$ETCD_NAME" "${extra_flags[@]}"..."
         while ! etcdctl member add "$ETCD_NAME" "${extra_flags[@]}"  | grep "^ETCD_" > "$ETCD_NEW_MEMBERS_ENV_FILE"; do
             warn "Failed to add self to cluster, keeping trying..."
             sleep 10
         done
+        info "Member add succeeded, saving env file..."
         replace_in_file "$ETCD_NEW_MEMBERS_ENV_FILE" "^" "export "
         sync -d "$ETCD_NEW_MEMBERS_ENV_FILE"
+        info "Env file saved!"
     else
         info "Node already in cluster"
     fi
     info "Loading env vars of existing cluster"
     . "$ETCD_NEW_MEMBERS_ENV_FILE"
+    info "add_self_to_cluster succeeded"
 }
 
 ########################
@@ -753,7 +671,9 @@ get_member_id() {
     if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
         is_healthy_etcd_cluster
         export ETCD_ACTIVE_ENDPOINTS
+        info "ETCD_ACTIVE_ENDPOINTS=$ETCD_ACTIVE_ENDPOINTS"
         if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
+            warn "fail to get member_id due to no ETCD_ACTIVE_ENDPOINTS"
             echo ""
             return 0
         fi
@@ -763,10 +683,11 @@ get_member_id() {
     extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}")
     ret=$(etcdctl "${extra_flags[@]}" member list | grep -w "$ETCD_INITIAL_ADVERTISE_PEER_URLS" | awk -F "," '{ print $1}')
     # if not return zero
-    info "member id: $ret"
     if [[ $? -ne 0 ]]; then
+        warn "fail to get member_id due to not find self"
         echo ""
     else
+        info "member id: $ret"
         echo "$ret"
     fi
 }
