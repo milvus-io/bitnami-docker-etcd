@@ -629,10 +629,11 @@ add_self_to_cluster() {
     local -a extra_flags
     read -r -a extra_flags <<< "$(etcdctl_auth_flags)"
     # is_healthy_etcd_cluster will also set ETCD_ACTIVE_ENDPOINTS
-    while ! is_healthy_etcd_cluster; do
-        warn "Cluster not healthy, not adding self to cluster for now, keeping trying..."
+    if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
+        error "No active endpoints in cluster, wait 10s, and restart the pod"
         sleep 10
-    done
+        exit 1
+    fi
 
     # only send req to healthy nodes
     info "Start adding self to cluster using etcdctl..."
