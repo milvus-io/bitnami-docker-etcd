@@ -511,11 +511,11 @@ etcd_initialize() {
 
     read -r -a initial_members <<<"$(tr ',;' ' ' <<<"$ETCD_INITIAL_CLUSTER")"
 
+    ETCD_ACTIVE_ENDPOINTS="$(get_etcd_active_endpoints)"
+    info "get_etcd_active_endpoints: $ETCD_ACTIVE_ENDPOINTS"
+    export ETCD_ACTIVE_ENDPOINTS
     if [[ -f "${ETCD_VOLUME_DIR}/member_removal.log" ]]; then
         info "Is upgraded from old version, checking if already removed from cluster"
-        ETCD_ACTIVE_ENDPOINTS="$(get_etcd_active_endpoints)"
-        info "get_etcd_active_endpoints: $ETCD_ACTIVE_ENDPOINTS"
-        export ETCD_ACTIVE_ENDPOINTS
         if is_empty_value "$(get_member_id)"; then
             if is_empty_value "$ETCD_ACTIVE_ENDPOINTS"; then
                 info "The cluster is all down, so we don't know which state the node is, so we assume it's ok this time."
@@ -636,8 +636,9 @@ add_self_to_cluster() {
     fi
 
     # only send req to healthy nodes
-    info "Start adding self to cluster using etcdctl..."
-    if is_empty_value "$(get_member_id)"; then
+    local member_id="$(get_member_id)"
+    if is_empty_value "$member_id"; then
+        info "Start adding self to cluster using etcdctl..."
         extra_flags+=("--endpoints=${ETCD_ACTIVE_ENDPOINTS}" "--peer-urls=$ETCD_INITIAL_ADVERTISE_PEER_URLS")
         info "Calling: etcdctl member add "$ETCD_NAME" "${extra_flags[@]}"..."
         while ! etcdctl member add "$ETCD_NAME" "${extra_flags[@]}"  | grep "^ETCD_" > "$ETCD_NEW_MEMBERS_ENV_FILE"; do
@@ -648,12 +649,18 @@ add_self_to_cluster() {
         replace_in_file "$ETCD_NEW_MEMBERS_ENV_FILE" "^" "export "
         sync -d "$ETCD_NEW_MEMBERS_ENV_FILE"
         info "Env file saved!"
+        info "Add_self_to_cluster succeeded"
     else
-        info "Node already in cluster"
+        info "Node already in cluster with member_id: $member_id"
     fi
-    info "Loading env vars of existing cluster"
-    . "$ETCD_NEW_MEMBERS_ENV_FILE"
-    info "add_self_to_cluster succeeded"
+
+    if [ -f "$ETCD_NEW_MEMBERS_ENV_FILE" ]; then
+        info "Loading env vars of existing cluster"
+        . "$ETCD_NEW_MEMBERS_ENV_FILE"
+    else
+        warn "Env file not found. If it's not an initial member, fix mannually by [etcdctl remove $member_id]"
+    fi
+
 }
 
 ########################
