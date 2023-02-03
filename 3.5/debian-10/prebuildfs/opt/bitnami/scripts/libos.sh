@@ -197,6 +197,8 @@ am_i_root() {
 #   --version - Distro version
 #   --branch - Distro branch
 #   --codename - Distro codename
+#   --name - Distro name
+#   --pretty-name - Distro pretty name
 # Returns:
 #   String
 #########################
@@ -222,6 +224,12 @@ get_os_metadata() {
         ;;
     --codename)
         get_os_release_metadata VERSION_CODENAME
+        ;;
+    --name)
+        get_os_release_metadata NAME
+        ;;
+    --pretty-name)
+        get_os_release_metadata PRETTY_NAME
         ;;
     *)
         error "Unknown flag ${flag_name}"
@@ -463,4 +471,85 @@ convert_to_hex() {
         char=${str:iterator:1}
         printf '%x' "'${char}"
     done
+}
+
+########################
+# Get boot time
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   Boot time metadata
+#########################
+get_boot_time() {
+    stat /proc --format=%Y
+}
+
+########################
+# Get machine ID
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   Machine ID
+#########################
+get_machine_id() {
+    local machine_id
+    if [[ -f /etc/machine-id ]]; then
+        machine_id="$(cat /etc/machine-id)"
+    fi
+    if [[ -z "$machine_id" ]]; then
+        # Fallback to the boot-time, which will at least ensure a unique ID in the current session
+        machine_id="$(get_boot_time)"
+    fi
+    echo "$machine_id"
+}
+
+########################
+# Get the root partition's disk device ID (e.g. /dev/sda1)
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   Root partition disk ID
+#########################
+get_disk_device_id() {
+    local device_id=""
+    if grep -q ^/dev /proc/mounts; then
+        device_id="$(grep ^/dev /proc/mounts | awk '$2 == "/" { print $1 }' | tail -1)"
+    fi
+    # If it could not be autodetected, fallback to /dev/sda1 as a default
+    if [[ -z "$device_id" || ! -b "$device_id" ]]; then
+        device_id="/dev/sda1"
+    fi
+    echo "$device_id"
+}
+
+########################
+# Get the root disk device ID (e.g. /dev/sda)
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   Root disk ID
+#########################
+get_root_disk_device_id() {
+    get_disk_device_id | sed -E 's/p?[0-9]+$//'
+}
+
+########################
+# Get the root disk size in bytes
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   Root disk size in bytes
+#########################
+get_root_disk_size() {
+    fdisk -l "$(get_root_disk_device_id)" | grep 'Disk.*bytes' | sed -E 's/.*, ([0-9]+) bytes,.*/\1/' || true
 }
