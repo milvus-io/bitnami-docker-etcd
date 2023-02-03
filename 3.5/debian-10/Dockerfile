@@ -7,18 +7,27 @@ ENV HOME="/" \
     OS_NAME="linux"
 
 COPY prebuildfs /
+
 # Install required system packages and dependencies
+
+# check from https://downloads.bitnami.com/files/stacksmith/${COMPONENT}.tar.gz.sha256
+# COMPONENTS=( \
+#       "yq-4.30.8-1-linux-${OS_ARCH}-debian-11" \
+#       "gosu-1.16.0-1-linux-${OS_ARCH}-debian-11" \
+#       "etcd-3.5.5-2-linux-${OS_ARCH}-debian-11" \
+#     )
+# OS_ARCH="${TARGETARCH:-amd64}
 RUN install_packages acl ca-certificates curl gzip procps tar
-RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "yq" "4.25.1-0" --checksum 863b0a81f75feed5c08bb5c1c5b280469b10c7cee9232ecbf613544755a7433c
-RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "gosu" "1.14.0-7" --checksum d6280b6f647a62bf6edc74dc8e526bfff63ddd8067dcb8540843f47203d9ccf1
-RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "etcd" "3.5.0-3" --checksum 31e6226efd5199679427a51f084388cceeb7966f1c7bb76ad4ca32910b55d4e5
+RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "yq" "4.30.8-1" --checksum 33fec06619aa3c1f7ea3c2516bf36f79af01354972ff06998ca6fe1d65078998
+RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "gosu" "1.16.0-1" --checksum 9ab9654690d90d3c49ff66fb1eb286487e318adc899d036bc45922f6b176865b
+RUN . /opt/bitnami/scripts/libcomponent.sh && component_unpack "etcd" "3.5.5-2" --checksum 83cb31342af4b898223f50af4bfa5a7f206450547854601331e1855ac1c2798d
 RUN apt-get update && apt-get upgrade -y && \
     rm -r /var/lib/apt/lists /var/cache/apt/archives
 RUN chmod g+rwX /opt/bitnami
 
 COPY rootfs /
 RUN /opt/bitnami/scripts/etcd/postunpack.sh
-ENV APP_VERSION="3.5.0" \
+ENV APP_VERSION="3.5.5" \
     BITNAMI_APP_NAME="etcd" \
     PATH="/opt/bitnami/common/bin:/opt/bitnami/etcd/bin:$PATH"
 
