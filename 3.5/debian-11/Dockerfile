@@ -6,11 +6,11 @@ LABEL maintainer="Team DevOps of Zilliz <devops@zilliz.com" \
       org.opencontainers.image.authors="https://bitnami.com/contact" \
       org.opencontainers.image.description="Application packaged by Bitnami, polished by zlliztech" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.ref.name="3.5.5-2-r1" \
+      org.opencontainers.image.ref.name="3.5.5-2-r3" \
       org.opencontainers.image.source="https://github.com/milvus-io/bitnami-docker-etcd" \
       org.opencontainers.image.title="etcd" \
       org.opencontainers.image.vendor="VMware, Inc." \
-      org.opencontainers.image.version="3.5.5-2-r1"
+      org.opencontainers.image.version="3.5.5-2-r3"
 
 ENV HOME="/" \
     OS_ARCH="${TARGETARCH:-amd64}" \
