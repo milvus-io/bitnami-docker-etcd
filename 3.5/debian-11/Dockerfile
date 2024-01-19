@@ -1,19 +1,19 @@
 FROM docker.io/bitnami/minideb:bullseye
 
-ARG TARGETARCH
+ARG TARGETARCH="linux/amd64"
 
 LABEL maintainer="Team DevOps of Zilliz <devops@zilliz.com" \
       org.opencontainers.image.authors="https://bitnami.com/contact" \
       org.opencontainers.image.description="Application packaged by Bitnami, polished by zlliztech" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.ref.name="3.5.5-2-r3" \
+      org.opencontainers.image.ref.name="3.5.5-r4" \
       org.opencontainers.image.source="https://github.com/milvus-io/bitnami-docker-etcd" \
       org.opencontainers.image.title="etcd" \
       org.opencontainers.image.vendor="VMware, Inc." \
-      org.opencontainers.image.version="3.5.5-2-r3"
+      org.opencontainers.image.version="3.5.5-r4"
 
 ENV HOME="/" \
-    OS_ARCH="${TARGETARCH:-amd64}" \
+    OS_ARCH_RAW="${TARGETARCH}" \
     OS_FLAVOUR="debian-11" \
     OS_NAME="linux"
 
@@ -22,10 +22,18 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Install required system packages and dependencies
 RUN install_packages ca-certificates curl procps
 RUN mkdir -p /tmp/bitnami/pkg/cache/ && cd /tmp/bitnami/pkg/cache/ && \
+    OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|-|'` && \
+    curl -SsLf https://github.com/etcd-io/etcd/releases/download/v3.5.5/etcd-v3.5.5-${OS_ARCH}.tar.gz -O && \
+    tar -zxf "etcd-v3.5.5-${OS_ARCH}.tar.gz" && \
+    mkdir -p /opt/bitnami/etcd/bin && \
+    mv ./etcd-v3.5.5-${OS_ARCH}/etcd /opt/bitnami/etcd/bin/etcd && \
+    mv ./etcd-v3.5.5-${OS_ARCH}/etcdctl /opt/bitnami/etcd/bin/etcdctl && \
+    mv ./etcd-v3.5.5-${OS_ARCH}/etcdutl /opt/bitnami/etcd/bin/etcdutl && \
+    rm -rf "etcd-v3.5.5-${OS_ARCH}.tar.gz"
+RUN cd /tmp/bitnami/pkg/cache/ && \
+    OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|-|'` && \
     COMPONENTS=( \
-      "yq-4.30.8-1-linux-${OS_ARCH}-debian-11" \
-      "gosu-1.16.0-1-linux-${OS_ARCH}-debian-11" \
-      "etcd-3.5.5-2-linux-${OS_ARCH}-debian-11" \
+      "yq-4.40.5-0-${OS_ARCH}-debian-11" \
     ) && \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
