@@ -1,4 +1,4 @@
-FROM docker.io/bitnami/minideb:bullseye
+FROM docker.io/bitnami/minideb:bookworm
 
 ARG TARGETARCH="linux/amd64"
 
@@ -6,15 +6,15 @@ LABEL maintainer="Team DevOps of Zilliz <devops@zilliz.com" \
       org.opencontainers.image.authors="https://bitnami.com/contact" \
       org.opencontainers.image.description="Application packaged by Bitnami, polished by zlliztech" \
       org.opencontainers.image.licenses="Apache-2.0" \
-      org.opencontainers.image.ref.name="3.5.14-r1" \
+      org.opencontainers.image.ref.name="3.5.14-r2" \
       org.opencontainers.image.source="https://github.com/milvus-io/bitnami-docker-etcd" \
       org.opencontainers.image.title="etcd" \
       org.opencontainers.image.vendor="VMware, Inc." \
-      org.opencontainers.image.version="3.5.14-r1"
+      org.opencontainers.image.version="3.5.14-r2"
 
 ENV HOME="/" \
     OS_ARCH_RAW="${TARGETARCH}" \
-    OS_FLAVOUR="debian-11" \
+    OS_FLAVOUR="debian-12" \
     OS_NAME="linux"
 
 COPY prebuildfs /
@@ -33,7 +33,7 @@ RUN mkdir -p /tmp/bitnami/pkg/cache/ && cd /tmp/bitnami/pkg/cache/ && \
 RUN cd /tmp/bitnami/pkg/cache/ && \
     OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|-|'` && \
     COMPONENTS=( \
-      "yq-4.40.5-0-${OS_ARCH}-debian-11" \
+      "yq-4.40.5-0-${OS_ARCH}-debian-12" \
     ) && \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \

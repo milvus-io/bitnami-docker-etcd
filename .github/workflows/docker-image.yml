@@ -47,7 +47,7 @@ jobs:
         id: build
         uses: docker/build-push-action@v5
         with:
-          context: 3.5/debian-11
+          context: 3.5/debian-12
           build-args: |
             TARGETARCH=${{ matrix.platform }}
           platforms: ${{ matrix.platform }}
