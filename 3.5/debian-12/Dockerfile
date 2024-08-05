@@ -18,7 +18,8 @@ ENV HOME="/" \
     OS_NAME="linux"
 
 COPY prebuildfs /
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN chmod +x usr/sbin/install_packages
+SHELL ["/bin/bash", "-o", "errexit", "-o", "nounset", "-o", "pipefail", "-c"]
 # Install required system packages and dependencies
 RUN install_packages ca-certificates curl procps
 RUN mkdir -p /tmp/bitnami/pkg/cache/ && cd /tmp/bitnami/pkg/cache/ && \
@@ -50,6 +51,7 @@ RUN apt-get autoremove --purge -y curl ca-certificates && \
 RUN chmod g+rwX /opt/bitnami
 
 COPY rootfs /
+RUN chmod +x /opt/bitnami/scripts/etcd/*
 RUN /opt/bitnami/scripts/etcd/postunpack.sh
 ENV APP_VERSION="3.5.14" \
     BITNAMI_APP_NAME="etcd" \
