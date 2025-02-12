@@ -33,8 +33,8 @@ RUN mkdir -p /tmp/bitnami/pkg/cache/ && cd /tmp/bitnami/pkg/cache/ && \
 RUN cd /tmp/bitnami/pkg/cache/ && \
     OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|-|'` && \
     COMPONENTS=( \
+      "yq-4.45.1-3-${OS_ARCH}-debian-12" \
     ) && \
-      "yq-4.45.1-3-linux-${OS_ARCH}-debian-12" \
     for COMPONENT in "${COMPONENTS[@]}"; do \
       if [ ! -f "${COMPONENT}.tar.gz" ]; then \
         curl -SsLf "https://downloads.bitnami.com/files/stacksmith/${COMPONENT}.tar.gz" -O ; \
