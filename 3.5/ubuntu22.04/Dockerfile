@@ -1,4 +1,4 @@
-FROM docker.io/bitnami/minideb:bookworm
+FROM docker.io/ubuntu:22.04
 
 ARG TARGETARCH="linux/amd64"
 
@@ -7,14 +7,14 @@ LABEL maintainer="Team DevOps of Zilliz <devops@zilliz.com" \
       org.opencontainers.image.description="Application packaged by Bitnami, polished by zilliztech" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.source="https://github.com/milvus-io/bitnami-docker-etcd" \
-      org.opencontainers.image.ref.name="3.5.18-r1" \
+      org.opencontainers.image.ref.name="3.5.18-r2" \
       org.opencontainers.image.title="etcd" \
       org.opencontainers.image.vendor="VMware, Inc." \
-      org.opencontainers.image.version="3.5.18-r1"
+      org.opencontainers.image.version="3.5.18-r2"
 
 ENV HOME="/" \
     OS_ARCH_RAW="${TARGETARCH}" \
-    OS_FLAVOUR="debian-12" \
+    OS_FLAVOUR="ubuntu-22.04" \
     OS_NAME="linux"
 
 COPY prebuildfs /
