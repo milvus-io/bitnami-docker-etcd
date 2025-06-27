@@ -220,7 +220,7 @@ etcd_start_bg() {
 # Returns:
 #   String
 ########################
-etcdctl_get_peer_endpoints() {
+etcdctl_get_endpoints() {
    echo "$ETCD_INITIAL_CLUSTER" | sed 's/^[^=]\+=http/http/g' |sed 's/,[^=]\+=/,/g'
 }
 
@@ -485,7 +485,7 @@ recalculate_initial_cluster() {
     local domain host member_host member_port member_id port scheme
 
     if is_boolean_yes "$ETCD_ON_K8S"; then
-        read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_peer_endpoints)")"
+        read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_endpoints)")"
         # This piece of code assumes this container is used on a K8s environment
         # where etcd members are part of a statefulset that uses a headless service
         # to create a unique FQDN per member. Under these circumstances, the
