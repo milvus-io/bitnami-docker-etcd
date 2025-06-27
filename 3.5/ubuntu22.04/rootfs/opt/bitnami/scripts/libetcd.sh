@@ -221,7 +221,7 @@ etcd_start_bg() {
 #   String
 ########################
 etcdctl_get_endpoints() {
-   echo "$ETCD_INITIAL_CLUSTER" | sed 's/^[^=]\+=http/http/g' |sed 's/,[^=]\+=/,/g'
+   echo "$ETCD_INITIAL_CLUSTER" | sed 's/^[^=]\+=http/http/g' |sed 's/,[^=]\+=/,/g' | sed 's/:2380/:2379/g'
 }
 
 ########################
