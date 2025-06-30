@@ -216,12 +216,36 @@ etcd_start_bg() {
 # Globals:
 #   ETCD_*
 # Arguments:
-#   $1 - exclude current member from the list (default: false)
+#   None
 # Returns:
 #   String
 ########################
 etcdctl_get_endpoints() {
    echo "$ETCD_INITIAL_CLUSTER" | sed 's/^[^=]\+=http/http/g' |sed 's/,[^=]\+=/,/g'
+}
+
+########################
+# Obtain client endpoints to connect when running 'ectdctl'
+# Globals:
+#   ETCD_*
+# Arguments:
+#   None
+# Returns:
+#   String
+########################
+etcdctl_get_client_endpoints() {
+    # Extract peer port from ETCD_LISTEN_PEER_URLS (first URL)
+    local first_peer_url=$(echo "$ETCD_LISTEN_PEER_URLS" | cut -d',' -f1)
+    local peer_port="${first_peer_url##*:}"
+
+    # Extract client port from ETCD_ADVERTISE_CLIENT_URLS (first URL)
+    local first_client_url=$(echo "$ETCD_ADVERTISE_CLIENT_URLS" | cut -d',' -f1)
+    local client_port="${first_client_url##*:}"
+
+    echo "$ETCD_INITIAL_CLUSTER" \
+        | sed 's/^[^=]\+=http/http/g' \
+        | sed 's/,[^=]\+=/,/g' \
+        | sed "s/:${peer_port}/:${client_port}/g"
 }
 
 ########################
@@ -261,7 +285,7 @@ etcd_store_member_id() {
     info "Obtaining cluster member ID"
     etcd_start_bg
     read -r -a extra_flags <<<"$(etcdctl_auth_flags)"
-    is_boolean_yes "$ETCD_ON_K8S" && extra_flags+=("--endpoints=$(etcdctl_get_endpoints)")
+    is_boolean_yes "$ETCD_ON_K8S" && extra_flags+=("--endpoints=$(etcdctl_get_client_endpoints)")
     if retry_while "etcdctl ${extra_flags[*]} member list" >/dev/null 2>&1; then
         while [[ ! -s "${ETCD_DATA_DIR}/member_id" ]]; do
             # We use 'stdbuf' to ensure memory buffers are flushed to disk
@@ -290,7 +314,7 @@ etcd_configure_rbac() {
     ! is_etcd_running && etcd_start_bg
     read -r -a extra_flags <<<"$(etcdctl_auth_flags)"
 
-    is_boolean_yes "$ETCD_ON_K8S" && extra_flags+=("--endpoints=$(etcdctl_get_endpoints)")
+    is_boolean_yes "$ETCD_ON_K8S" && extra_flags+=("--endpoints=$(etcdctl_get_client_endpoints)")
     if retry_while "etcdctl ${extra_flags[*]} member list" >/dev/null 2>&1; then
         debug_execute etcdctl "${extra_flags[@]}" user add root --interactive=false <<<"$ETCD_ROOT_PASSWORD"
         debug_execute etcdctl "${extra_flags[@]}" user grant-role root root
@@ -353,7 +377,7 @@ get_etcd_active_endpoints() {
     local -a endpoints_array=()
     local host port
 
-    is_boolean_yes "$ETCD_ON_K8S" && read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_endpoints)")"
+    is_boolean_yes "$ETCD_ON_K8S" && read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_client_endpoints)")"
     local -r cluster_size=${#endpoints_array[@]}
     read -r -a advertised_array <<<"$(tr ',;' ' ' <<<"$ETCD_ADVERTISE_CLIENT_URLS")"
     host="$(parse_uri "${advertised_array[0]}" "host")"
@@ -393,7 +417,7 @@ is_healthy_etcd_cluster() {
     local -a endpoints_array=()
     local host port
 
-    is_boolean_yes "$ETCD_ON_K8S" && read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_endpoints)")"
+    is_boolean_yes "$ETCD_ON_K8S" && read -r -a endpoints_array <<<"$(tr ',;' ' ' <<<"$(etcdctl_get_client_endpoints)")"
     local -r cluster_size=${#endpoints_array[@]}
     read -r -a advertised_array <<<"$(tr ',;' ' ' <<<"$ETCD_ADVERTISE_CLIENT_URLS")"
     host="$(parse_uri "${advertised_array[0]}" "host")"
