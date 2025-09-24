@@ -33,7 +33,7 @@ RUN mkdir -p /tmp/bitnami/pkg/cache/ && cd /tmp/bitnami/pkg/cache/ && \
 RUN cd /tmp/bitnami/pkg/cache/ && \
     OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|_|'` && \
     if [ ! -f "yq_${OS_ARCH}.tar.gz" ]; then \
-      curl -SsLf "https://github.com/mikefarah/yq/releases/download/v4.45.3/yq_${OS_ARCH}" -O ; \
+      curl -SsLf "https://github.com/mikefarah/yq/releases/download/v4.47.2/yq_${OS_ARCH}" -O ; \
     fi && \
     mkdir -p /opt/bitnami/common/bin/ && \
     mv "yq_${OS_ARCH}" /opt/bitnami/common/bin/yq
