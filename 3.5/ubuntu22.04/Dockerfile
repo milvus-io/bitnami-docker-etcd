@@ -7,10 +7,10 @@ LABEL maintainer="Team DevOps of Zilliz <devops@zilliz.com" \
       org.opencontainers.image.description="Application packaged by Bitnami, polished by zilliztech" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.source="https://github.com/milvus-io/bitnami-docker-etcd" \
-      org.opencontainers.image.ref.name="3.5.25-r1" \
+      org.opencontainers.image.ref.name="3.5.30-r1" \
       org.opencontainers.image.title="etcd" \
       org.opencontainers.image.vendor="VMware, Inc." \
-      org.opencontainers.image.version="3.5.25-r1"
+      org.opencontainers.image.version="3.5.30-r1"
 
 ENV HOME="/" \
     OS_ARCH_RAW="${TARGETARCH}" \
@@ -24,12 +24,12 @@ RUN install_packages ca-certificates curl procps
 RUN mkdir -p /tmp/bitnami/pkg/cache/ && cd /tmp/bitnami/pkg/cache/ && \
     OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|-|'` && \
     curl -SsLf https://github.com/etcd-io/etcd/releases/download/v3.5.25/etcd-v3.5.25-${OS_ARCH}.tar.gz -O && \
-    tar -zxf "etcd-v3.5.25-${OS_ARCH}.tar.gz" && \
+    tar -zxf "etcd-v3.5.30-${OS_ARCH}.tar.gz" && \
     mkdir -p /opt/bitnami/etcd/bin && \
     mv ./etcd-v3.5.25-${OS_ARCH}/etcd /opt/bitnami/etcd/bin/etcd && \
     mv ./etcd-v3.5.25-${OS_ARCH}/etcdctl /opt/bitnami/etcd/bin/etcdctl && \
     mv ./etcd-v3.5.25-${OS_ARCH}/etcdutl /opt/bitnami/etcd/bin/etcdutl && \
-    rm -rf "etcd-v3.5.25-${OS_ARCH}.tar.gz"
+    rm -rf "etcd-v3.5.30-${OS_ARCH}.tar.gz"
 RUN cd /tmp/bitnami/pkg/cache/ && \
     OS_ARCH=`echo ${OS_ARCH_RAW}| sed 's|/|_|'` && \
     if [ ! -f "yq_${OS_ARCH}.tar.gz" ]; then \
@@ -44,7 +44,7 @@ RUN chmod g+rwX /opt/bitnami
 
 COPY rootfs /
 RUN /opt/bitnami/scripts/etcd/postunpack.sh
-ENV APP_VERSION="3.5.25" \
+ENV APP_VERSION="3.5.30" \
     BITNAMI_APP_NAME="etcd" \
     ETCDCTL_API="3" \
     PATH="/opt/bitnami/common/bin:/opt/bitnami/etcd/bin:$PATH"
